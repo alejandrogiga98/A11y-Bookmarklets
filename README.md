@@ -2,7 +2,7 @@
 
 This is a starter static site that showcases bookmarklets for accessibility testing and development. You can open `index.html` locally or host the folder on any static server.
 
-🔗 **[Try the live demo]()** 
+🔗 **[Try the live demo](https://anthonybyansi.github.io/A11y-Bookmarklets/)** 
 
 ## How to use
 
