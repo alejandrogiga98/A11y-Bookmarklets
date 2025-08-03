@@ -1,0 +1,33 @@
+
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; font-family: system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Noto Sans, Arial, sans-serif; }
+.site-header { padding: 16px; background: #111; color: #fff; }
+.site-header h1 { margin: 0 0 8px; font-size: 1.6rem; }
+.site-header p { margin: 0 0 12px; opacity: .9; }
+.controls { display: flex; gap: 8px; flex-wrap: wrap; }
+.controls input, .controls select { padding: 10px; border: 1px solid #ccc; border-radius: 8px; min-width: 240px; }
+
+.grid { padding: 16px; display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 16px; }
+
+.card { border: 1px solid #e5e5e5; border-radius: 16px; padding: 16px; background: #fff; display: flex; flex-direction: column; gap: 10px; }
+.card h3 { margin: 0; font-size: 1.05rem; }
+.meta { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.tag { font-size: .75rem; background: #f3f3f3; padding: 4px 8px; border-radius: 999px; border: 1px solid #e5e5e5; }
+
+.actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.actions button, .actions a.btn { text-align: center; padding: 10px; border-radius: 10px; border: 1px solid #ccc; background: #fafafa; cursor: pointer; text-decoration: none; }
+.actions button:hover, .actions a.btn:hover { background: #f1f1f1; }
+.actions a.btn { user-select: none; }
+
+.desc { font-size: .92rem; color: #333; }
+
+.site-footer { padding: 16px; border-top: 1px solid #eee; color: #333; }
+
+dialog[open] { border: 1px solid #ddd; border-radius: 12px; padding: 0; }
+dialog .dlg { padding: 16px; min-width: 280px; }
+dialog h4 { margin: 0 0 12px; }
+dialog .row { display: grid; gap: 6px; margin-bottom: 10px; }
+dialog input, dialog textarea, dialog select { padding: 8px; border: 1px solid #ccc; border-radius: 8px; width: 100%; }
+dialog .actions { grid-template-columns: 1fr 1fr; }
+
+small.code { font-family: ui-monospace, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; background: #f6f6f6; padding: 2px 6px; border-radius: 6px; border: 1px solid #eee; }

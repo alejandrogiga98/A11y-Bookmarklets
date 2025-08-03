@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>A11y Bookmarklets Lab</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="site-header">
+  <h1>A11y Bookmarklets Lab</h1>
+  <p>Copy or drag any item to your bookmarks bar. Click info for usage notes.</p>
+  <div class="controls">
+    <input id="search" type="search" placeholder="Search by name or description" aria-label="Search bookmarklets">
+    <select id="category">
+      <option value="all">All categories</option>
+    </select>
+  </div>
+</header>
+
+<main id="grid" class="grid" aria-live="polite"></main>
+
+<footer class="site-footer">
+  <details>
+    <summary>About this lab</summary>
+    <p>This is a static site that generates bookmarklet links for accessibility testing and development. Items marked AI need a model endpoint and key you provide. Many actions are toggles, so click again to revert.</p>
+    <p>Some sites use Content Security Policy which can block bookmarklets. When that happens, try another page, open DevTools, or run the code from the console.</p>
+    <p>Project license: MIT.</p>
+  </details>
+</footer>
+
+<script src="main.js"></script>
+<script src="catalog.js"></script>
+</body>
+</html>
