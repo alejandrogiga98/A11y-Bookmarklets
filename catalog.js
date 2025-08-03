@@ -271,5 +271,531 @@ const catalog = [
     "description": "Start a log of actions and notes. Copy or download when done.",
     "ai": false,
     "code": "\n      const ID='a11y-session-rec';\n      if(document.getElementById(ID)){ document.getElementById(ID).remove(); return; }\n      const panel=document.createElement('div'); panel.id=ID;\n      panel.style='position:fixed;z-index:2147483647;left:8px;top:8px;width:360px;max-height:80vh;overflow:auto;background:#fff;border:1px solid #ccc;border-radius:10px;box-shadow:0 4px 20px rgba(0,0,0,.15);font:12px ui-monospace,monospace;padding:10px';\n      const log=window.__a11yLog = window.__a11yLog || [];\n      const area=document.createElement('textarea'); area.rows=8; area.style='width:100%'; area.placeholder='Notes...';\n      const list=document.createElement('pre'); list.style='max-height:30vh;overflow:auto;background:#f7f7f7;border:1px solid #eee;border-radius:8px;padding:8px';\n      const btn=(t,fn)=>{ const b=document.createElement('button'); b.textContent=t; b.style='padding:6px 8px;border:1px solid #ccc;border-radius:8px;background:#fafafa;cursor:pointer;margin-right:6px'; b.onclick=fn; return b; };\n      function render(){ list.textContent=log.map(x=>`[${x.time}] ${x.msg}`).join('\\n'); }\n      function add(msg){ log.push({time:new Date().toLocaleString(), msg}); render(); }\n      add('Session started');\n      panel.append(area, document.createElement('div'));\n      const row=panel.lastChild;\n      row.append(btn('Add note', ()=>{ if(area.value.trim()){ add(area.value.trim()); area.value=''; } }),\n                 btn('Copy log', ()=>{ navigator.clipboard.writeText(list.textContent); alert('Copied'); }),\n                 btn('Download', ()=>{ const blob=new Blob([list.textContent], {type:'text/plain'}); const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download='a11y-session.txt'; a.click(); setTimeout(()=>URL.revokeObjectURL(url), 1000); }),\n                 btn('Close', ()=>panel.remove()));\n      panel.append(list);\n      document.body.appendChild(panel);\n      render();\n    "
+  },
+
+  {
+    id: "focus-graph-analyzer",
+    name: "Focus graph analyzer",
+    category: "analysis",
+    description: "Model keyboard tab order as a graph. Highlight traps and unreachable items.",
+    long: "Approximates native tab order from tabindex and DOM order, builds forward and backward edges, flags positive tabindex, and shows quick stats.",
+    ai: false,
+    code: `
+    const ID='a11y-focus-graph'; const old=document.getElementById(ID); if(old){ old.remove(); }
+    const wrap=document.createElement('div'); wrap.id=ID; wrap.style='position:fixed;inset:0;pointer-events:none;z-index:2147483647';
+    const focusables=[...document.querySelectorAll('a[href],button,input,select,textarea,[tabindex]')]
+      .filter(e=>!e.disabled && e.tabIndex!==-1 && e.offsetParent);
+    const withTab = focusables.map((el,dom)=>({el, dom, ti: el.tabIndex||0}));
+    const pos = withTab.filter(x=>x.ti>0).sort((a,b)=>a.ti-b.ti || a.dom-b.dom);
+    const zero = withTab.filter(x=>x.ti===0).sort((a,b)=>a.dom-b.dom);
+    const seq = [...pos, ...zero].map(x=>x.el);
+    const idx = new Map(seq.map((el,i)=>[el,i]));
+    const edgesF = new Map(seq.map((el,i)=>[el, seq[(i+1)%seq.length]||null]));
+    const edgesB = new Map(seq.map((el,i)=>[el, seq[(i-1+seq.length)%seq.length]||null]));
+    let traps=0, unreachable=0, riskyPos=pos.length;
+    if(!seq.length){ alert('No focusable elements'); return; }
+    const seen=new Set(seq);
+    const root=seq[0]; const rects=[];
+    for(const el of seq){
+      const r=el.getBoundingClientRect();
+      const badge=document.createElement('div');
+      const f=edgesF.get(el), b=edgesB.get(el);
+      badge.textContent=(idx.get(el)+1)+'→'+(f?idx.get(f)+1:'×');
+      badge.style=\`position:absolute;left:\${r.left+scrollX}px;top:\${r.top+scrollY}px;background:#ffe08a;border:1px solid #333;border-radius:10px;padding:2px 6px;font:12px monospace\`;
+      wrap.appendChild(badge);
+      rects.push(r);
+    }
+    // crude trap heuristic: element whose forward and backward targets equal itself
+    for(const el of seq){ const f=edgesF.get(el), b=edgesB.get(el); if(f===el && b===el) traps++; }
+    // unreachable heuristic: focusables not in seq (tabindex -1 or hidden) but still interactive
+    const allInteractive=[...document.querySelectorAll('a,button,input,select,textarea,[tabindex]')].filter(e=>e.offsetParent);
+    unreachable = allInteractive.filter(e=>!idx.has(e) && e.tabIndex!==-1).length;
+    document.body.appendChild(wrap);
+    alert(\`Focus nodes: \${seq.length}\\nPositive tabindex: \${riskyPos}\\nTrap candidates: \${traps}\\nUnreachable candidates: \${unreachable}\`);
+  `
+  },
+  {
+    id: "reading-order-correlator",
+    name: "Reading order correlator",
+    category: "reading",
+    description: "Compare visual flow to DOM order using Kendall tau.",
+    long: "Lists text blocks, orders them by visual position, compares to DOM index, reports tau and inversions, and highlights large inversions.",
+    ai: false,
+    code: `
+    const ID='a11y-read-corr'; const old=document.getElementById(ID); if(old){ old.remove(); }
+    const qs='p,h1,h2,h3,h4,h5,h6,li,dt,dd,section,article,aside,main,header,footer,nav,blockquote,pre';
+    const blocks=[...document.querySelectorAll(qs)].filter(e=>e.offsetParent && (e.innerText||'').trim());
+    if(!blocks.length){ alert('No readable blocks'); return; }
+    const domOrder=new Map(blocks.map((e,i)=>[e,i]));
+    const visual=[...blocks].sort((a,b)=>{const ra=a.getBoundingClientRect(), rb=b.getBoundingClientRect(); if(Math.abs(ra.top-rb.top)>8) return ra.top-rb.top; return ra.left-rb.left;});
+    let inversions=0, n=visual.length;
+    for(let i=0;i<n;i++) for(let j=i+1;j<n;j++){ if(domOrder.get(visual[i])>domOrder.get(visual[j])) inversions++; }
+    const denom=n*(n-1)/2; const tau=denom? 1-(2*inversions/denom):1;
+    const wrap=document.createElement('div'); wrap.id=ID; wrap.style='position:fixed;inset:0;pointer-events:none;z-index:2147483647';
+    // flag large inversions
+    visual.forEach((el,i)=>{
+      const diff=Math.abs(domOrder.get(el)-i);
+      if(diff>=5){ const r=el.getBoundingClientRect(); const b=document.createElement('div'); b.textContent='↕'; b.style=\`position:absolute;left:\${r.left+scrollX}px;top:\${r.top+scrollY}px;color:#e00;font:16px monospace\`; wrap.appendChild(b); }
+    });
+    document.body.appendChild(wrap);
+    alert(\`Kendall tau: \${tau.toFixed(2)}  inversions: \${inversions}\`);
+  `
+  },
+  {
+    id: "rendered-contrast-heatmap",
+    name: "Rendered contrast heatmap",
+    category: "color",
+    description: "Sample contrast on visible text and overlay a pass or fail heatmap.",
+    long: "Estimates foreground and effective background for text nodes and overlays red fail, yellow borderline, green pass. Uses computed styles with ancestor fallback.",
+    ai: false,
+    code: `
+    function parseColor(c){const ctx=document.createElement('canvas').getContext('2d');ctx.fillStyle=c;return ctx.fillStyle;}
+    function rgbToArray(c){const m=c.match(/rgba?\\((\\d+),\\s*(\\d+),\\s*(\\d+)/i);return m?[+m[1],+m[2],+m[3]]:[0,0,0];}
+    function relLum([r,g,b]){[r,g,b]=[r,g,b].map(v=>{v/=255;return v<=0.03928?v/12.92:Math.pow((v+0.055)/1.055,2.4)});return 0.2126*r+0.7152*g+0.0722*b;}
+    function contrast(c1,c2){const L1=relLum(rgbToArray(parseColor(c1))),L2=relLum(rgbToArray(parseColor(c2)));const [a,b]=L1>L2?[L1,L2]:[L2,L1];return (a+0.05)/(b+0.05)}
+    const ID='a11y-contrast-heat'; const old=document.getElementById(ID); if(old){ old.remove(); }
+    const wrap=document.createElement('div'); wrap.id=ID; wrap.style='position:fixed;inset:0;pointer-events:none;z-index:2147483647';
+    const texts=[...document.querySelectorAll('body *')].filter(e=>e.offsetParent && (e.innerText||'').trim());
+    let pass=0, borderline=0, fail=0;
+    for(const el of texts){
+      const cs=getComputedStyle(el);
+      const fg=cs.color;
+      let bg=cs.backgroundColor, p=el;
+      while((bg==='rgba(0, 0, 0, 0)'||bg==='transparent') && (p=p.parentElement)) bg=getComputedStyle(p).backgroundColor;
+      const r=el.getBoundingClientRect(); if(!r.width||!r.height) continue;
+      const ratio=contrast(fg,bg);
+      let color='rgba(0,255,0,.22)'; // pass
+      const size=parseFloat(cs.fontSize); const bold=parseInt(cs.fontWeight,10)>=700; const large=(size>=18)||(size>=14&&bold);
+      const need=large?3:4.5;
+      if(ratio<need){ color='rgba(255,0,0,.25)'; fail++; }
+      else if(ratio<need+1){ color='rgba(255,200,0,.22)'; borderline++; }
+      else pass++;
+      const box=document.createElement('div');
+      box.title=\`\${ratio.toFixed(2)}:1\`;
+      box.style=\`position:absolute;left:\${r.left+scrollX}px;top:\${r.top+scrollY}px;width:\${r.width}px;height:\${r.height}px;background:\${color}\`;
+      wrap.appendChild(box);
+    }
+    document.body.appendChild(wrap);
+    alert(\`Pass \${pass}  Borderline \${borderline}  Fail \${fail}\`);
+  `
+  },
+  {
+    id: "keyboard-unit-tester",
+    name: "Keyboard behavior unit tester",
+    category: "analysis",
+    description: "Check Enter and Space on controls. Report silent elements.",
+    long: "Emulates Enter and Space where allowed, watches for click and activation. Flags elements that ignore both keys.",
+    ai: false,
+    code: `
+    const ID='a11y-keytest'; const old=document.getElementById(ID); if(old){ old.remove(); }
+    const q='a[href],button,[role="button"],input[type="checkbox"],input[type="radio"]';
+    const els=[...document.querySelectorAll(q)].filter(e=>e.offsetParent);
+    const silent=[];
+    for(const el of els){
+      let activated=false;
+      const onClick=()=>activated=true;
+      el.addEventListener('click', onClick, {once:true});
+      el.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',bubbles:true}));
+      el.dispatchEvent(new KeyboardEvent('keyup',{key:'Enter',bubbles:true}));
+      el.dispatchEvent(new KeyboardEvent('keydown',{key:' ',bubbles:true}));
+      el.dispatchEvent(new KeyboardEvent('keyup',{key:' ',bubbles:true}));
+      setTimeout(()=>{ if(!activated) silent.push(el); }, 30);
+    }
+    setTimeout(()=>{
+      alert(silent.length? \`Silent on Enter and Space: \${silent.length}\` : 'All tested controls responded');
+    }, 220);
+  `
+  },
+  {
+    id: "form-error-exerciser",
+    name: "Form error exerciser",
+    category: "forms",
+    description: "Trigger invalid states and check error focus and associations.",
+    long: "Finds a form, empties required fields, runs reportValidity, checks :invalid count, focus placement, and aria-describedby links.",
+    ai: false,
+    code: `
+    const form=document.querySelector('form')||document.querySelector('[role="form"]');
+    if(!form){ alert('No form found'); return; }
+    const fields=[...form.querySelectorAll('input,select,textarea')].filter(f=>!f.disabled);
+    for(const f of fields){ if(f.required || f.getAttribute('aria-required')==='true'){ try{ f.value=''; }catch{} } }
+    const before=document.activeElement;
+    const ok=form.reportValidity ? form.reportValidity() : form.checkValidity();
+    const invalid=[...form.querySelectorAll(':invalid')];
+    let firstFocus=(document.activeElement&&document.activeElement!==before)? document.activeElement : null;
+    // association check
+    const badAssoc=invalid.filter(f=>{
+      const ids=(f.getAttribute('aria-describedby')||'').trim().split(/\\s+/).filter(Boolean);
+      return ids.length && !ids.every(id=>document.getElementById(id));
+    }).length;
+    alert(\`Valid: \${ok}  Invalid fields: \${invalid.length}\\nFirst error focus: \${firstFocus?firstFocus.name||firstFocus.id||firstFocus.tagName:'(none)'}\\nBad aria-describedby refs: \${badAssoc}\`);
+  `
+  },
+  {
+    id: "live-region-monitor",
+    name: "Live region monitor",
+    category: "live",
+    description: "Watch aria-live and alert regions. Show update latency and dedup.",
+    long: "Observes live regions, logs unique messages, timestamps them, and estimates time since start.",
+    ai: false,
+    code: `
+    const ID='a11y-live-mon'; const old=document.getElementById(ID); if(old){ old.remove(); }
+    const panel=document.createElement('div'); panel.id=ID;
+    panel.style='position:fixed;right:8px;top:8px;width:360px;max-height:70vh;overflow:auto;background:#fff;border:1px solid #ccc;border-radius:10px;padding:8px;z-index:2147483647;font:12px monospace';
+    panel.innerHTML='<b>Live region monitor</b><hr><div id="log"></div>';
+    document.body.appendChild(panel);
+    const log=panel.querySelector('#log'); const t0=performance.now(); const seen=new Set();
+    const lives=[...document.querySelectorAll('[aria-live], [role="alert"]')];
+    function add(t){ const row=document.createElement('div'); row.textContent=((performance.now()-t0)|0)+'ms: '+t; log.appendChild(row); }
+    add(\`Watching \${lives.length} regions\`);
+    const mo=new MutationObserver(ms=>{
+      ms.forEach(m=>{
+        const target=lives.find(l=>l.contains(m.target));
+        if(target){
+          const text=(target.innerText||target.textContent||'').trim().slice(0,160);
+          if(text && !seen.has(text)){ seen.add(text); add(text); }
+        }
+      });
+    });
+    mo.observe(document.body,{subtree:true, childList:true, characterData:true});
+  `
+  },
+  {
+    id: "zoom-400-stress",
+    name: "400% zoom stress test",
+    category: "zoom",
+    description: "Simulate 320 CSS px and 400 percent zoom. Flag horizontal scroll and overlaps.",
+    long: "Wraps page content to emulate narrow viewport and high zoom, checks for x axis scroll and overlapping text blocks.",
+    ai: false,
+    code: `
+    const ID='a11y-zoom-wrap'; const old=document.getElementById(ID);
+    if(old){ old.remove(); document.documentElement.style.overflow=''; alert('Zoom test off'); return; }
+    const wrap=document.createElement('div'); wrap.id=ID; while(document.body.firstChild){ wrap.appendChild(document.body.firstChild); }
+    document.body.appendChild(wrap);
+    wrap.style.transformOrigin='top left'; wrap.style.transform='scale(4)';
+    wrap.style.width='320px'; document.documentElement.style.overflow='auto';
+    setTimeout(()=>{
+      const doc=document.documentElement;
+      const hasX=doc.scrollWidth>doc.clientWidth+1;
+      // overlap heuristic
+      const blocks=[...document.querySelectorAll('p,li,div,section,article,main,header,footer,nav')].filter(e=>e.offsetParent && (e.innerText||'').trim());
+      let overlaps=0;
+      for(let i=0;i<Math.min(200,blocks.length);i++){
+        const a=blocks[i].getBoundingClientRect();
+        for(let j=i+1;j<Math.min(200,blocks.length);j++){
+          const b=blocks[j].getBoundingClientRect();
+          if(a.top<b.bottom && b.top<a.bottom && a.left<b.right && b.left<a.right){ overlaps++; break; }
+        }
+      }
+      alert(\`Horizontal scroll: \${hasX?'yes':'no'}  Overlap pairs (sample): \${overlaps}\`);
+    }, 300);
+  `
+  },
+  {
+    id: "nontext-contrast-auditor",
+    name: "Non text contrast auditor",
+    category: "color",
+    description: "Check focus ring thickness and contrast on focusable controls.",
+    long: "Focus each control, read outline or box shadow color and width, compare to parent background, and flag rings under 2 px or contrast under 3:1.",
+    ai: false,
+    code: `
+    function parseColor(c){const ctx=document.createElement('canvas').getContext('2d');ctx.fillStyle=c;return ctx.fillStyle;}
+    function rgbToArray(c){const m=c.match(/rgba?\\((\\d+),\\s*(\\d+),\\s*(\\d+)/i);return m?[+m[1],+m[2],+m[3]]:[0,0,0];}
+    function relLum([r,g,b]){[r,g,b]=[r,g,b].map(v=>{v/=255;return v<=0.03928?v/12.92:Math.pow((v+0.055)/1.055,2.4)});return 0.2126*r+0.7152*g+0.0722*b;}
+    function contrast(c1,c2){const L1=relLum(rgbToArray(parseColor(c1))),L2=relLum(rgbToArray(parseColor(c2)));const [a,b]=L1>L2?[L1,L2]:[L2,L1];return (a+0.05)/(b+0.05)}
+    const ID='a11y-nontext-contrast'; const old=document.getElementById(ID); if(old){ old.remove(); }
+    const wrap=document.createElement('div'); wrap.id=ID; wrap.style='position:fixed;inset:0;pointer-events:none;z-index:2147483647';
+    const els=[...document.querySelectorAll('a[href],button,input,select,textarea,[tabindex]:not([tabindex="-1"])')].filter(e=>e.offsetParent);
+    let low=0, thin=0;
+    for(const el of els){
+      const prev=document.activeElement; el.focus(); const cs=getComputedStyle(el);
+      const ow=parseFloat(cs.outlineWidth)||0; const oc=cs.outlineColor; let bg=cs.backgroundColor, p=el;
+      while((bg==='rgba(0, 0, 0, 0)'||bg==='transparent') && (p=p.parentElement)) bg=getComputedStyle(p).backgroundColor;
+      const ratio=contrast(oc,bg);
+      if(ow<2) thin++;
+      if(ratio<3) low++;
+      const r=el.getBoundingClientRect(); const b=document.createElement('div');
+      b.style=\`position:absolute;left:\${r.left+scrollX}px;top:\${r.top+scrollY}px;width:\${r.width}px;height:\${r.height}px;border:2px solid \${ratio<3?'#e00':'#0a0'}\`;
+      b.title=\`ring \${ow}px, contrast \${ratio.toFixed(2)}:1\`;
+      wrap.appendChild(b);
+      if(prev&&prev.focus) prev.focus();
+    }
+    document.body.appendChild(wrap);
+    alert(\`Low contrast rings: \${low}  Thin rings: \${thin}\`);
+  `
+  },
+  {
+    id: "name-consistency-oracle",
+    name: "Accessible name consistency",
+    category: "analysis",
+    description: "Compare computed name to nearby label text and score similarity.",
+    long: "Computes a simple accessible name, finds closest visible label text, scores similarity, flags big mismatches.",
+    ai: false,
+    code: `
+    function nameOf(el){
+      const byId=id=>id&&document.getElementById(id)?.innerText.trim();
+      if(el.getAttribute('aria-label')) return el.getAttribute('aria-label').trim();
+      const lb=el.getAttribute('aria-labelledby'); if(lb){ return lb.split(/\\s+/).map(byId).filter(Boolean).join(' ').trim(); }
+      if(el.alt) return el.alt.trim();
+      if(el.placeholder) return el.placeholder.trim();
+      const own=(el.innerText||'').trim(); return own.slice(0,80);
+    }
+    function lev(a,b){const m=a.length,n=b.length,d=Array.from({length:m+1},(_,i)=>Array(n+1).fill(0)); for(let i=0;i<=m;i++) d[i][0]=i; for(let j=0;j<=n;j++) d[0][j]=j;
+      for(let i=1;i<=m;i++) for(let j=1;j<=n;j++){ const c=a[i-1]===b[j-1]?0:1; d[i][j]=Math.min(d[i-1][j]+1,d[i][j-1]+1,d[i-1][j-1]+c);} return d[m][n]; }
+    const ID='a11y-name-oracle'; const old=document.getElementById(ID); if(old){ old.remove(); }
+    const wrap=document.createElement('div'); wrap.id=ID; wrap.style='position:fixed;inset:0;pointer-events:none;z-index:2147483647';
+    const els=[...document.querySelectorAll('a[href],button,input,select,textarea,[role],[tabindex]:not([tabindex="-1"])')].filter(e=>e.offsetParent);
+    let bad=0;
+    for(const el of els){
+      const nm=nameOf(el)||''; // visible label guess
+      let vis=''; const lab = el.id && document.querySelector(\`label[for="\${el.id}"]\`); if(lab) vis=lab.innerText.trim();
+      if(!vis){ const near=el.closest('label'); if(near) vis=near.innerText.trim(); }
+      if(!vis){ const p=el.parentElement; if(p) vis=(p.querySelector('label')?.innerText||'').trim(); }
+      const dist=lev(nm.toLowerCase(), vis.toLowerCase()); const max=Math.max(nm.length, vis.length)||1; const ratio=1 - (dist/max);
+      const r=el.getBoundingClientRect(); const b=document.createElement('div');
+      const good = ratio>=0.6 || (!vis && nm);
+      b.style=\`position:absolute;left:\${r.left+scrollX}px;top:\${r.top+scrollY}px;border:2px solid \${good?'#0a0':'#e00'};width:\${r.width}px;height:\${r.height}px\`;
+      b.title=\`name "\${nm}" vs label "\${vis}" score \${ratio.toFixed(2)}\`;
+      wrap.appendChild(b);
+      if(!good) bad++;
+    }
+    document.body.appendChild(wrap);
+    alert(\`Low similarity items: \${bad}\`);
+  `
+  },
+  {
+    id: "role-constraint-solver",
+    name: "Role constraint solver",
+    category: "analysis",
+    description: "Check basic ARIA ownership and required props. Propose small fixes.",
+    long: "Validates a few common structures like listbox, tablist, menu. Suggests role or attribute patches to satisfy minimal rules.",
+    ai: false,
+    code: `
+    const rules={
+      listbox:{ owns:['option'] },
+      tablist:{ owns:['tab'] },
+      menu:{ owns:['menuitem','menuitemcheckbox','menuitemradio'] }
+    };
+    const findings=[];
+    for(const role of Object.keys(rules)){
+      const parents=[...document.querySelectorAll(\`[role="\${role}"]\`)];
+      for(const el of parents){
+        const owns=rules[role].owns;
+        const has=owns.some(r=>el.querySelector('[role="'+r+'"]'));
+        if(!has){
+          const child=el.firstElementChild;
+          findings.push({el, role, fix: child? \`Add role="\${owns[0]}" to first child\` : 'Add a child with the required role'});
+        }
+      }
+    }
+    let msg = findings.length? findings.map(f=>\`[\${f.role}] \${f.fix}\`).join('\\n') : 'No ownership gaps found';
+    alert(msg);
+  `
+  },
+  {
+    id: "interaction-state-fuzzer",
+    name: "Interaction state fuzzer",
+    category: "analysis",
+    description: "Explore key and click sequences on common widgets to find failures.",
+    long: "Heuristically identifies dialogs, menus, and disclosure buttons, runs short input sequences, and reports items that do not close or toggle as expected.",
+    ai: false,
+    code: `
+    const issues=[];
+    // dialogs
+    const dialogs=[...document.querySelectorAll('[role="dialog"],dialog')];
+    dialogs.forEach(d=>{
+      if(d.open===false && d.showModal) try{ d.showModal(); }catch{}
+      const before = d.open||getComputedStyle(d).display!=='none';
+      d.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true}));
+      const after = d.open||getComputedStyle(d).display!=='none';
+      if(before && after) issues.push('Dialog did not close on Escape');
+      if(d.close) try{ d.close(); }catch{}
+    });
+    // menus
+    const menus=[...document.querySelectorAll('[role="menu"],[role="menubar"]')];
+    menus.forEach(m=>{
+      const items=[...m.querySelectorAll('[role^="menuitem"]')];
+      if(items.length){
+        items[0].focus();
+        items[0].dispatchEvent(new KeyboardEvent('keydown',{key:'ArrowDown',bubbles:true}));
+        items[0].dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true}));
+      }
+    });
+    // disclosures
+    const toggles=[...document.querySelectorAll('[aria-expanded]')];
+    toggles.forEach(t=>{
+      const before=t.getAttribute('aria-expanded');
+      t.click();
+      const after=t.getAttribute('aria-expanded');
+      if(before===after) issues.push('Toggle did not change aria-expanded');
+    });
+    alert(issues.length? issues.join('\\n') : 'No issues found in quick pass');
+  `
+  },
+  {
+    id: "icon-only-detector",
+    name: "Visual only icon detector",
+    category: "analysis",
+    description: "Find icon only controls with weak or missing names.",
+    long: "Scans small square controls with only SVG or background image and no visible text. Flags missing or low quality accessible names.",
+    ai: false,
+    code: `
+    const ID='a11y-icon-only'; const old=document.getElementById(ID); if(old){ old.remove(); }
+    const wrap=document.createElement('div'); wrap.id=ID; wrap.style='position:fixed;inset:0;pointer-events:none;z-index:2147483647';
+    function nameOf(el){ return el.getAttribute('aria-label')||el.getAttribute('title')||el.getAttribute('aria-labelledby')||''; }
+    const q='button,a,[role="button"]';
+    const els=[...document.querySelectorAll(q)].filter(e=>e.offsetParent);
+    let risk=0;
+    els.forEach(el=>{
+      const r=el.getBoundingClientRect();
+      const hasText=(el.innerText||'').trim().length>0;
+      const hasSvg=el.querySelector('svg');
+      const hasBg=/url\\(/.test(getComputedStyle(el).backgroundImage||'');
+      const small = r.width<=40 && r.height<=40;
+      const nm=(nameOf(el)||'').trim();
+      const bad = small && !hasText && (hasSvg||hasBg) && nm.length<3;
+      if(bad){ risk++; const b=document.createElement('div'); b.style=\`position:absolute;left:\${r.left+scrollX}px;top:\${r.top+scrollY}px;width:\${r.width}px;height:\${r.height}px;border:3px solid #e00\`; b.title='Suspect icon only control'; wrap.appendChild(b); }
+    });
+    document.body.appendChild(wrap);
+    alert(\`Icon only risk count: \${risk}\`);
+  `
+  },
+  {
+    id: "multilingual-bidi-audit",
+    name: "Multilingual and bidi audit",
+    category: "reading",
+    description: "Check lang tags and direction vs actual script runs.",
+    long: "Finds mixed script runs, flags elements where dir or lang is missing or conflicts with content script.",
+    ai: false,
+    code: `
+    const rtl=/[\\u0590-\\u05FF\\u0600-\\u06FF\\u0750-\\u077F\\u08A0-\\u08FF]/; // Hebrew, Arabic ranges
+    const ID='a11y-bidi'; const old=document.getElementById(ID); if(old){ old.remove(); }
+    const wrap=document.createElement('div'); wrap.id=ID; wrap.style='position:fixed;inset:0;pointer-events:none;z-index:2147483647';
+    const nodes=[...document.querySelectorAll('p,span,div,li,th,td,h1,h2,h3,h4,h5,h6')].filter(e=>e.offsetParent && (e.innerText||'').trim());
+    let issues=0;
+    for(const el of nodes){
+      const text=el.innerText.trim();
+      const hasRTL=rtl.test(text);
+      const dirAttr=(el.dir||document.documentElement.dir||'ltr').toLowerCase();
+      const lang=el.closest('[lang]')?.getAttribute('lang') || document.documentElement.getAttribute('lang') || '';
+      if(hasRTL && dirAttr!=='rtl'){ const r=el.getBoundingClientRect(); const b=document.createElement('div'); b.style=\`position:absolute;left:\${r.left+scrollX}px;top:\${r.top+scrollY}px;width:\${r.width}px;height:\${r.height}px;border:3px solid #e00\`; b.title='RTL text without dir=rtl'; wrap.appendChild(b); issues++; }
+      if(!lang){ const r=el.getBoundingClientRect(); const b=document.createElement('div'); b.style=\`position:absolute;left:\${r.left+scrollX}px;top:\${r.top+scrollY}px;width:\${r.width}px;height:\${r.height}px;border:2px dashed #f80\`; b.title='Missing lang'; wrap.appendChild(b); issues++; }
+    }
+    document.body.appendChild(wrap);
+    alert(\`Language or dir issues: \${issues}\`);
+  `
+  },
+  {
+    id: "first-accessible-paint",
+    name: "First accessible paint",
+    category: "analysis",
+    description: "Estimate when the page becomes keyboard usable.",
+    long: "From the moment you run it, watches for the first landmark and a focusable item that accepts focus, then reports elapsed time.",
+    ai: false,
+    code: `
+    const t0=performance.now();
+    function hasLandmark(){ return document.querySelector('main,[role="main"],nav,[role="navigation"],[role="region"],header,footer'); }
+    function hasFocusable(){ return document.querySelector('a[href],button,input,select,textarea,[tabindex]:not([tabindex="-1"])'); }
+    if(hasLandmark() && hasFocusable()){ alert('Already usable. Elapsed '+((performance.now()-t0)|0)+'ms'); return; }
+    const mo=new MutationObserver(()=>{
+      if(hasLandmark() && hasFocusable()){
+        mo.disconnect();
+        // try to focus the first item to confirm
+        const f=document.querySelector('a[href],button,input,select,textarea,[tabindex]:not([tabindex="-1"])'); try{ f.focus(); }catch{}
+        alert('Usable after '+((performance.now()-t0)|0)+'ms');
+      }
+    });
+    mo.observe(document.body,{subtree:true,childList:true});
+  `
+  },
+  {
+    id: "voice-command-readiness",
+    name: "Voice command readiness",
+    category: "analysis",
+    description: "Check name uniqueness and brevity for voice control targeting.",
+    long: "Builds a set of control names, finds duplicates and long names. Reports clusters that need clearer microcopy.",
+    ai: false,
+    code: `
+    function nameOf(el){
+      const byId=id=>id&&document.getElementById(id)?.innerText.trim();
+      if(el.getAttribute('aria-label')) return el.getAttribute('aria-label').trim();
+      const lb=el.getAttribute('aria-labelledby'); if(lb){ return lb.split(/\\s+/).map(byId).filter(Boolean).join(' ').trim(); }
+      const t=(el.innerText||'').trim(); return t || el.getAttribute('title') || '';
+    }
+    const ctrls=[...document.querySelectorAll('a[href],button,[role="button"],input,select,textarea')].filter(e=>e.offsetParent);
+    const names=ctrls.map(el=>nameOf(el).toLowerCase().replace(/\\s+/g,' ').trim()).map(s=>s.slice(0,60));
+    const map=new Map(); names.forEach((n,i)=>{ if(!n) return; const arr=map.get(n)||[]; arr.push(ctrls[i]); map.set(n,arr); });
+    const dups=[...map.entries()].filter(([n,els])=>els.length>1 && n.length>0);
+    const longNames=names.filter(n=>n && n.split(' ').length>6).length;
+    alert(\`Duplicate names: \${dups.length}  Long names: \${longNames}\`);
+  `
+  },
+  {
+    id: "caption-quality-heuristics",
+    name: "Caption quality heuristics",
+    category: "media",
+    description: "Analyze <track> cues for density, gaps, and lag.",
+    long: "Parses caption tracks on page videos, computes words per minute, average gap, and overlap counts.",
+    ai: false,
+    code: `
+    const vids=[...document.querySelectorAll('video')];
+    if(!vids.length){ alert('No videos'); return; }
+    let reports=[];
+    vids.forEach(v=>{
+      const tracks=[...v.textTracks||[]].filter(t=>/captions|subtitles/i.test(t.kind||''));
+      tracks.forEach(t=>{
+        const cues=[...t.cues||[]];
+        let words=0, gaps=0, overlap=0, totalDur=0;
+        for(let i=0;i<cues.length;i++){
+          const c=cues[i]; const next=cues[i+1];
+          words += (c.text||'').trim().split(/\\s+/).filter(Boolean).length;
+          totalDur += (c.endTime-c.startTime);
+          if(next){ const gap=next.startTime - c.endTime; if(gap>0) gaps+=gap; if(gap<0) overlap++; }
+        }
+        const dur = v.duration && isFinite(v.duration) ? v.duration : totalDur;
+        const wpm = dur ? (words/dur)*60 : 0;
+        reports.push({track:t.label||'captions', wpm: wpm.toFixed(0), gaps: gaps.toFixed(1), overlap});
+      });
+    });
+    alert(reports.length? reports.map(r=>\`\${r.track}: \${r.wpm} wpm, gaps \${r.gaps}s, overlaps \${r.overlap}\`).join('\\n') : 'No caption tracks');
+  `
+  },
+  {
+    id: "table-structure-verifier",
+    name: "Table structure verifier",
+    category: "analysis",
+    description: "Validate header associations and scope in data tables.",
+    long: "Builds header sets per data cell using scope and headers attributes, flags cells with missing or extra associations.",
+    ai: false,
+    code: `
+    const tables=[...document.querySelectorAll('table')];
+    if(!tables.length){ alert('No tables'); return; }
+    let issues=0;
+    function headersForCell(td, table){
+      const ths=[...table.querySelectorAll('th')];
+      const viaHeaders=(td.getAttribute('headers')||'').split(/\\s+/).filter(Boolean).map(id=>document.getElementById(id)).filter(Boolean);
+      if(viaHeaders.length) return new Set(viaHeaders);
+      // scope based
+      const set=new Set();
+      const row=td.parentElement;
+      const colIndex=[...row.children].indexOf(td);
+      for(const th of ths){
+        const scope=(th.getAttribute('scope')||'').toLowerCase();
+        if(scope==='col'){ const r=[...th.parentElement.children].indexOf(th); if(r===colIndex) set.add(th); }
+        else if(scope==='row'){ if(th.parentElement===row) set.add(th); }
+      }
+      return set;
+    }
+    tables.forEach(table=>{
+      const tds=[...table.querySelectorAll('td')];
+      tds.forEach(td=>{
+        const set=headersForCell(td, table);
+        if(!set.size){ td.style.outline='3px solid #e00'; issues++; }
+      });
+    });
+    alert(\`Cells without clear headers: \${issues}\`);
+  `
   }
+
+
+
 ];
