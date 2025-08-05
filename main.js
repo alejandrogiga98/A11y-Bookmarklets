@@ -4,8 +4,8 @@ const state = {
   items: [],
 };
 
-function $(sel, root=document){ return root.querySelector(sel); }
-function $all(sel, root=document){ return Array.from(root.querySelectorAll(sel)); }
+function $(sel, root = document) { return root.querySelector(sel); }
+function $all(sel, root = document) { return Array.from(root.querySelectorAll(sel)); }
 
 function minifyLight(src) {
   // Remove /* */ comments and leading/trailing spaces per line, then collapse whitespace.
@@ -30,9 +30,9 @@ function toBookmarklet(code) {
 }
 
 function copy(text) {
-  navigator.clipboard.writeText(text).then(()=>{
+  navigator.clipboard.writeText(text).then(() => {
     alert('Copied');
-  }, ()=>{
+  }, () => {
     const ta = document.createElement('textarea');
     ta.value = text;
     document.body.appendChild(ta);
@@ -58,16 +58,25 @@ function render(items) {
       </div>
       <p class="desc">${it.description}</p>
       <div class="actions">
-        <a class="btn drag" href="${href}" draggable="true" title="Drag to your bookmarks bar">Drag me</a>
+        <a class="btn drag" href="${href}" draggable="true" title="Drag to your bookmarks bar">${it.name}</a>
         <button class="copy">Copy URL</button>
         <button class="view">View code</button>
         <button class="info">Info</button>
       </div>
     `;
     grid.appendChild(card);
-    card.querySelector('.copy').addEventListener('click', ()=>copy(href));
-    card.querySelector('.view').addEventListener('click', ()=>showCode(it));
-    card.querySelector('.info').addEventListener('click', ()=>showInfo(it));
+
+    // Set up drag behavior to ensure correct bookmark name
+    const dragLink = card.querySelector('.drag');
+    dragLink.addEventListener('dragstart', (e) => {
+      // Set the bookmark title for when it's dragged to bookmarks bar
+      e.dataTransfer.setData('text/uri-list', href);
+      e.dataTransfer.setData('text/plain', it.name);
+    });
+
+    card.querySelector('.copy').addEventListener('click', () => copy(href));
+    card.querySelector('.view').addEventListener('click', () => showCode(it));
+    card.querySelector('.info').addEventListener('click', () => showInfo(it));
   }
 }
 
@@ -88,9 +97,9 @@ function showCode(it) {
     </div>`;
   document.body.appendChild(d);
   d.showModal();
-  d.querySelector('[data-act="copy"]').addEventListener('click', ()=>copy(compact));
-  d.querySelector('[data-act="close"]').addEventListener('click', ()=>d.close());
-  d.addEventListener('close', ()=>d.remove());
+  d.querySelector('[data-act="copy"]').addEventListener('click', () => copy(compact));
+  d.querySelector('[data-act="close"]').addEventListener('click', () => d.close());
+  d.addEventListener('close', () => d.remove());
 }
 
 function showInfo(it) {
@@ -106,14 +115,14 @@ function showInfo(it) {
     </div>`;
   document.body.appendChild(d);
   d.showModal();
-  d.querySelector('[data-act="close"]').addEventListener('click', ()=>d.close());
-  d.addEventListener('close', ()=>d.remove());
+  d.querySelector('[data-act="close"]').addEventListener('click', () => d.close());
+  d.addEventListener('close', () => d.remove());
 }
 
 function initCatalog() {
   // catalog is defined in catalog.js
   state.items = catalog.slice();
-  const cats = ['all', ...Array.from(new Set(state.items.map(x=>x.category)))];
+  const cats = ['all', ...Array.from(new Set(state.items.map(x => x.category)))];
   for (const c of cats) {
     const opt = document.createElement('option');
     opt.value = c;
@@ -126,7 +135,7 @@ function initCatalog() {
     const c = $('#category').value;
     const filtered = state.items.filter(it => {
       const inCat = c === 'all' ? true : it.category === c;
-      const inText = (it.name + ' ' + it.description + ' ' + (it.long||'')).toLowerCase().includes(q);
+      const inText = (it.name + ' ' + it.description + ' ' + (it.long || '')).toLowerCase().includes(q);
       return inCat && inText;
     });
     render(filtered);
